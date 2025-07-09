@@ -118,7 +118,90 @@ const result=await ordercollection.insertOne(orderInfo)
 res.send(result)
   })
   // manage plant quantity
-
+ app.patch('/plants/quantity/:id',veryfiToken,async(req,res)=>{
+  const id=req.params.id
+  const {quantityToUpdate,status}=req.body
+  const filter={_id:new ObjectId(id)}
+  let updateDoc={
+$inc:{quantity:-quantityToUpdate}
+  }
+  if(status==='increase'){
+    updateDoc={
+$inc:{quantity:quantityToUpdate}
+  }
+  }
+  const result=await plantscollection.updateOne(filter,updateDoc)
+  res.send(result)
+ })
+//  get all customer order
+app.get('/customer-orders/:email',veryfiToken,async(req,res)=>{
+const email=req.params.email
+const query={'customer.email':email}
+const result=await ordercollection.aggregate([
+  {
+    $match:query,
+  },
+  {
+    $addFields:{
+      plantId:{$toObjectId:'$plantId'}
+    }
+  },
+  {
+    $lookup:{
+      from:'plants',
+      localField:'plantId',
+      foreignField:'_id',
+      as:'plants'
+    }
+  },
+  {
+    $unwind:'$plants'
+  },
+  {
+    $addFields:{
+      name:'$plants.name',
+      image:'$plants.image',
+      category:'$plants.category'
+    }
+  },
+  {
+    $project:{
+      plants:0,
+    }
+  }
+]).toArray()
+res.send(result)
+})
+// cancel/delete order
+app.delete('/order/:id',veryfiToken,async(req,res)=>{
+  const id=req.params.id
+  const query={_id:new ObjectId(id)}
+  const order=await ordercollection.findOne(query)
+  if(order.status==='delivered') return res.status(409).send('cannot cancled once the product')
+  const result=await ordercollection.deleteOne(query)
+  res.send(result)
+})
+// manage user status and role
+app.patch('/user/:email',veryfiToken,async(req,res)=>{
+  const email=req.params.email
+  const query={email}
+  const user=await usercollection.findOne(query)
+  if(!user || user.status==='requested') return res.status(400).send('You have already request')
+  
+const updateDoc={
+  $set:{
+    status:'Requested' 
+  }
+}
+const result=await usercollection.updateOne(query,updateDoc)
+res.send(result)
+})
+// get user role
+app.get('/user/role/:email',async(req,res)=>{
+  const email=req.params.email
+  const result=await usercollection.findOne({email})
+  res.send({role:result?.role})
+})
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
     // Send a ping to confirm a successful connection
