@@ -6,6 +6,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 require('dotenv').config()
+const stripe=require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port=process.env.PORT||5000;
 // midaleware
 const corsOptions = {
@@ -367,6 +368,78 @@ app.patch('/orders/:id',veryfiToken,verifySeller,async(req,res)=>{
   }
   const result=await ordercollection.updateOne(filter,updateDoc)
   res.send(result)
+})
+// admin statics
+app.get('/admit-stat',veryfiToken,verifyAdmin,async(req,res)=>{
+  // get total user,total plant
+  const totalUser=await usercollection.estimatedDocumentCount({role:'admin'})
+  const totalPlants=await plantscollection.estimatedDocumentCount()
+  const allorders=await ordercollection.find().toArray()
+  // const totalorder=allorders.length
+  // const totalprice=allorders.reduce((sum,order)=>sum+order.price,0)
+  // genarate chart data
+const chartData=await ordercollection.aggregate([
+  {
+    $group:{
+      _id:{
+        $dateToString:{
+          format: '%Y-%m-%d',
+          date:{$toDate:'$_id'}
+        }
+      },
+      quantity:{$sum:'$quantity'},
+      price:{$sum:'$price' },
+      order: { $sum: 1 }
+     
+    },
+  },
+  {
+    $project:{
+      _id:0,
+      date:'$_id',
+      quantity:1,
+      order:1,
+      price:1
+    }
+  },
+  {$sort:{data:1}}
+]).toArray()
+console.log(chartData)
+  // get total revenue,total order
+  const orderDetails=await ordercollection.aggregate([
+    {
+      $group:{
+        _id:null,
+        totalRevenue:{$sum:'$price'},
+        totalorder:{$sum:1}
+      }
+    },
+    {
+      $project:{
+        _id:0,
+      }
+    }
+  ]).next()
+
+  res.send({totalUser,totalPlants,...orderDetails,chartData})
+})
+// create payment intent
+app.post('/create-payment',veryfiToken,async(req,res)=>{
+const {quantity,plantId}=req.body
+const plant=await plantscollection.findOne({_id:new ObjectId(plantId)})
+if(!plant){
+return res.status(400).send({message:'plant not found'})
+}
+// total price in cent(poysha)
+const totalPrice=(quantity*plant.price)*100    
+const {client_secret} = await stripe.paymentIntents.create({
+  amount: totalPrice,
+  currency: 'usd',
+  automatic_payment_methods:{
+    enabled:true,
+  }
+});
+res.send({clientSecret:client_secret})
 })
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
