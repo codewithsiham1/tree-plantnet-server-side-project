@@ -57,9 +57,10 @@ const veryfiToken=async(req,res,next)=>{
   }
   jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,decoded)=>{
     if(err){
-      console.log(err)
+      console.log("❌ JWT verification error:",err)
        return res.status(401).send({ message: 'unauthorized access' })
     }
+    console.log("✅ JWT Decoded:", decoded);
     req.user=decoded
     next()
   })
@@ -121,6 +122,8 @@ async function run() {
   const usercollection=client.db('PlantNet').collection('user')
   const plantscollection=client.db('PlantNet').collection('plants')
   const ordercollection=client.db('PlantNet').collection('order')
+  const reviewcollection=client.db('PlantNet').collection('review')
+  const  contactcollection=client.db('PlantNet').collection('contact')
   // verify admin midleware
   const verifyAdmin=async(req,res,next)=>{
 //  console.log('data from verifytoken middleware---->',req,user?.email)
@@ -169,6 +172,7 @@ res.send(result)
   // get a plants by id
   app.get('/plants/:id',async(req,res)=>{
     const id=req.params.id
+    console.log("Received plant id:", id);
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({ error: 'Invalid ObjectId' });
     }
@@ -177,25 +181,53 @@ res.send(result)
     res.send(result)
   })
   // save order data in db
-    app.post('/order',veryfiToken,async(req,res)=>{
-const orderInfo=req.body
-console.log(orderInfo)
-const result=await ordercollection.insertOne(orderInfo)
-// send email
-if(result?.insertedId){
-// to customer
-sendEmail(orderInfo?.customer?.email,{
-  subject:'Order successfull',
-  message:`You have placed an order sucessfully.Transtion Id:${result?.insertedId}`
-})
-// to seller
-sendEmail(orderInfo?.seller,{
-  subject:'Hurry?You have an order process',
-  message:`Gets the plant Ready For :${orderInfo?.customer?.name}`
-})
-}
-res.send(result)
-  })
+//     app.post('/order',veryfiToken,async(req,res)=>{
+// const orderInfo=req.body
+// console.log(orderInfo)
+// const result=await ordercollection.insertOne(orderInfo)
+// // send email
+// if (result?.insertedId) {
+//   // console check
+//   console.log("Customer Info:", orderInfo.customer);
+//   console.log("Seller Info:", orderInfo.seller);
+
+//   // to customer
+//   sendEmail(orderInfo.customer, {
+//     subject: 'Order successful',
+//     message: `You have placed an order successfully. Transaction Id: ${result?.insertedId}`
+//   });
+
+//   // to seller
+//   sendEmail(orderInfo.seller, {
+//     subject: 'Hurry! You have a new order to process',
+//     message: `Get the plant ready for: ${orderInfo?.customer?.name || orderInfo.customer}`
+//   });
+// }
+// res.send(result)
+//   })
+app.post('/order',veryfiToken, async (req, res) => {
+  const orderInfo = req.body;
+  console.log("Order Info:", orderInfo);
+
+  const result = await ordercollection.insertOne(orderInfo);
+
+  if (result?.insertedId) {
+    // send email to customer
+    sendEmail(orderInfo.customer, {
+      subject: 'Order successful',
+      message: `You have placed an order successfully. Transaction Id: ${result?.insertedId}`
+    });
+
+    // send email to seller
+    sendEmail(orderInfo.seller, {
+      subject: 'Hurry! You have a new order to process',
+      message: `Get the plant ready for: ${orderInfo.customer}`
+    });
+  }
+
+  res.send(result);
+});
+
   // manage plant quantity
  app.patch('/plants/quantity/:id',veryfiToken,async(req,res)=>{
   const id=req.params.id
@@ -347,7 +379,8 @@ app.patch('/user/role/:email',veryfiToken,verifyAdmin,async(req,res)=>{
 })
 // get inventory data form seller
 app.get('/plants/seller',veryfiToken,verifySeller,async(req,res)=>{
-  const email=req.user.email
+  const email=req.user?.email
+   console.log('Decoded Email from Token:', email);
   const result=await plantscollection.find({'seller.email':email}).toArray()
   res.send(result)
 })
@@ -440,6 +473,105 @@ const {client_secret} = await stripe.paymentIntents.create({
   }
 });
 res.send({clientSecret:client_secret})
+})
+// my inventory Updata data modal
+app.patch('/plants/:id',veryfiToken,verifySeller,async(req,res)=>{
+  const id=req.params.id
+  const updatedData=req.body;
+  const result=await plantscollection.updateOne({_id:new ObjectId(id)},{$set:updatedData})
+  res.send(result)
+})
+// review collection
+app.post('/review', veryfiToken, async (req, res) => {
+  const { plantId, orderId, rating, comment } = req.body;
+  try {
+    const review = {
+      plantId: new ObjectId(plantId),
+      orderId: new ObjectId(orderId),
+      rating: +rating,
+      comment,
+      userEmail: req.user.email,
+      createdAt: new Date()
+    };
+    const result = await reviewcollection.insertOne(review);
+
+    await ordercollection.updateOne(
+      { _id: new ObjectId(orderId) },
+      { $set: { review: true } }
+    );
+
+    res.send(result);
+  } catch (err) {
+    console.error('Review error:', err);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+});
+app.get('/review',async(req,res)=>{
+  try{
+    const reviewwithUser=await reviewcollection.aggregate([
+      {
+        $lookup:{
+          from:'user',
+          localField:'userEmail',
+          foreignField:'email',
+          as:'userInfo'
+        }
+      },
+      {
+        $unwind:'$userInfo'
+      },
+      {
+        $project:{
+          plantId:1,
+          orderId:1,
+          rating:1,
+          comment:1,
+          createdAt:1,
+          'userInfo.name': 1,
+          'userInfo.image': 1
+        }
+      }
+    ]).toArray()
+    res.send(reviewwithUser)
+  }catch(err){
+    console.log(err)
+    res.status(500).send({ error: 'Failed to fetch reviews with user info' });
+  }
+})
+// rating count
+app.get('/review/stat/:plantId', async (req, res) => {
+  const plantId = req.params.plantId; 
+  try {
+    const stats = await reviewcollection.aggregate([
+      { $match: { plantId: new ObjectId(plantId) } },
+      {
+        $group: {
+          _id: '$plantId',
+          averageRating: { $avg: '$rating' }
+        }
+      }
+    ]).toArray();
+
+    if (stats.length > 0) {
+      res.send({ averageRating: stats[0].averageRating });
+    } else {
+      res.send({ averageRating: 0 }); // যদি কোন review না থাকে
+    }
+  } catch (err) {
+    console.log(err);
+    res.status(500).send({ error: 'Failed to fetch rating stats' });
+  }
+});
+// contact information
+app.post('/contact', async (req, res) => {
+  const contact = { ...req.body, createdAt: new Date() };
+  const result = await contactcollection.insertOne(contact);
+  res.send(result);
+});
+// message get
+app.get('/contact',veryfiToken,verifyAdmin,async(req,res)=>{
+  const result=await contactcollection.find().sort({createdAt:-1}).toArray()
+  res.send(result)
 })
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
