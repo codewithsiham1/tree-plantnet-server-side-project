@@ -11,7 +11,6 @@ const port=process.env.PORT||5000;
 // midaleware
 const corsOptions = {
   origin: [
-    'http://localhost:5173',
     'https://plantnet-1ba23.web.app',
     'https://y-pied-phi.vercel.app'
   ],
