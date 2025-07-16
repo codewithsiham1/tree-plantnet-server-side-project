@@ -15,7 +15,7 @@ const corsOptions = {
     'https://plantnet-1ba23.web.app',
     'https://y-pied-phi.vercel.app'
   ],
-  credentials: true,
+  // credentials: true,
 };
 app.use(cors(corsOptions))
 app.use(express.json())
