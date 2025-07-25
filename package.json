@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "index.js",
+    "start": "node api/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -18,7 +18,9 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.17.0",
     "nodemailer": "^7.0.5",
-    "stripe": "^18.3.0",
-    "vercel": "^44.4.1"
+    "stripe": "^18.3.0"
+  },
+  "devDependencies": {
+    "vercel": "^44.5.5"
   }
 }
