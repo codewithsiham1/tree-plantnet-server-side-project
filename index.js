@@ -495,4 +495,4 @@ app.listen(port, () => {
   console.log(`PlantNet Server Is Running on Port: ${port}`);
 });
 
-module.exports = app;
+
