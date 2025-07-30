@@ -13,9 +13,12 @@ const port = process.env.PORT || 5000;
 // Middleware setup
 const corsOptions = {
   origin: [
+    'http://localhost:5173', 
     'https://plantnet-1ba23.web.app',
-    'https://y-pied-phi.vercel.app'
+    
   ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 };
 app.use(cors(corsOptions));
