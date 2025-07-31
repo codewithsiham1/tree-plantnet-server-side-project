@@ -14,8 +14,7 @@ const port = process.env.PORT || 5000;
 const corsOptions = {
   origin: [
     'http://localhost:5173', 
-    'https://tree-plantnet-client-project.onrender.com'
-    
+    'https://plantnet-1ba23.web.app'  // ✅ Fixed: no space
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
