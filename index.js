@@ -180,6 +180,19 @@ async function run() {
       const plant = await plantscollection.findOne({ _id: new ObjectId(id) });
       res.send(plant);
     });
+    // Popular products route
+app.get('/popular-products', async (req, res) => {
+  try {
+    const popularPlants = await plantscollection.find()
+      .sort({ 'rating': -1 }) // যদি রেটিং থাকে
+      .limit(6) // শুধু শীর্ষ ৬টা
+      .toArray();
+    res.send(popularPlants);
+  } catch (error) {
+    console.error('Failed to fetch popular products:', error);
+    res.status(500).send({ error: 'Failed to fetch popular products' });
+  }
+});
 
     // Create order - user must be logged in
     app.post('/order', verifyToken, async (req, res) => {
@@ -231,20 +244,35 @@ async function run() {
       ]).toArray();
       res.send(orders);
     });
-
-    // Get seller orders
-    app.get('/seller-orders', verifyToken, verifySeller, async (req, res) => {
-      const email = req.user.email;
+    // get all seller oder
+     app.get('/seller-orders/:email', verifyToken,verifySeller, async (req, res) => {
+      const email = req.params.email;
       const orders = await ordercollection.aggregate([
-        { $match: { "seller.email": email } },
-        { $addFields: { plantId: { $convert: { input: "$plantId", to: "objectId", onError: null, onNull: null } } } },
-        { $lookup: { from: "plants", localField: "plantId", foreignField: "_id", as: "plants" } },
-        { $unwind: "$plants" },
-        { $addFields: { name: "$plants.name" } },
+        { $match: { seller: email } },
+        { $addFields: { plantId: { $toObjectId: '$plantId' } } },
+        { $lookup: { from: 'plants', localField: 'plantId', foreignField: '_id', as: 'plants' } },
+        { $unwind: '$plants' },
+        { $addFields: { name: '$plants.name', } },
         { $project: { plants: 0 } }
       ]).toArray();
       res.send(orders);
     });
+
+    // // Get seller orders
+    // app.get('/seller-orders', verifyToken, verifySeller, async (req, res) => {
+    //   const email = req.user.email;
+    //    console.log("Seller Orders Fetching for:", email);
+    //   const orders = await ordercollection.aggregate([
+    //     { $match: { seller: email } },
+    //     { $addFields: { plantId: { $convert: { input: "$plantId", to: "objectId", onError: null, onNull: null } } } },
+    //     { $lookup: { from: "plants", localField: "plantId", foreignField: "_id", as: "plants" } },
+    //     { $unwind: "$plants" },
+    //     { $addFields: { name: "$plants.name" } },
+    //     { $project: { plants: 0 } }
+    //   ]).toArray();
+    //   console.log("Fetched Orders:", orders.length);
+    //   res.send(orders);
+    // });
 
     // Delete/cancel order if not delivered
     app.delete('/order/:id', verifyToken, async (req, res) => {
